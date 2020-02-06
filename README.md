@@ -1,6 +1,18 @@
 # RTG-Julia-ReadingGroup
 
 
+### Help links for Julia and computing in general
+
+Docs for Julia
+
+1. https://en.wikibooks.org/wiki/Introducing_Julia
+2. https://docs.julialang.org/en/v1/
+
+Online short course for basic tools used in CS workflows:
+
+1. https://missing.csail.mit.edu
+
+
 ### Basic instructions for working with a cloned repo
 
 Getting a copy on your computer use
@@ -57,7 +69,7 @@ If there are changes to https://github.com/WPolonik/RTG-Julia-ReadingGroup you w
 
 
 ```
-shell git pull upstream master
+shell: git pull upstream master
 ```
 
 
