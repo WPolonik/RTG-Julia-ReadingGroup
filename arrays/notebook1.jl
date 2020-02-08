@@ -32,8 +32,53 @@ fill(Float32(0), 10,10)
 fill(0.0, 10,10)
 fill(0, 10,10)
 
+
+mat = fill(0, 5,5)
+for cl=1:5, rw=1:5
+	mat[rw,cl] = cl + rw 
+end
+
+mat = Array{Int64}(undef, 5,5)
+for cl=1:5, rw=1:5
+	mat[rw,cl] = cl + rw 
+end
+
+
+mat = Int64[]
+for i=1:20 # rand([20, 200])
+	j = i^2
+	#push!(mat, i^2)
+	global mat = vcat(mat, j)
+end
+
+mat = [1,2]
+for i=1:5
+	mat = vcat(mat, i^2)
+end
+
+function foo1(mat)
+	for i=1:2
+		mat = vcat(mat, i^2)
+	end
+	mat[1] = 0
+	return mat
+end
+
+function foo2!(mat)
+	for i=1:2
+		mat[i] = i^2
+	end
+	return nothing
+end
+
+mat = [1,2]
+foo1(mat)
+mat 
+foo2(mat)
+
 #%% 10 x 10 matrix of random normals
 mat2  = randn(10, 10)
+mat2  = rand(10, 10)
 
 #%% 1 based indexing, use mat[1,2] instead of mat(1,2)
 mat2[1, 2] # first row, second column
@@ -42,6 +87,9 @@ mat2[1, :] # first row
 
 #%% singular degenerate dimensions are removed
 mat2[:, 2] # second column
+
+mat2[end:-1:1, end-2:end] # second column
+
 
 mat2[1:3, 7:end] # matrix sub block
 
@@ -151,7 +199,7 @@ uv.L
 
 L = uv.L
 y = rand(size(L,1))
-x = L \ y
+x = L \ y 
 
 @which L \ y
 # @edit L\y

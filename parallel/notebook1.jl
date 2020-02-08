@@ -1,9 +1,7 @@
 
-#%% Some lo
 
-
+using Random: shuffle
 using Distributed
-import Distributed: remotecall_eval
 import Distributed: rmprocs
 addprocs(2)
 
@@ -12,6 +10,15 @@ addprocs(2)
 
 #%% easy removal of all jobs
 rmprocs() = rmprocs(workers())
+
+function wrkplan(njobs::Int, wrker_list::Vector{T}) where T<:Int
+    vec_rng = Distributed.splitrange(njobs, length(wrker_list))
+    schdl   = Int[]
+    for (wrker, rng) = zip(wrker_list, vec_rng)
+        schdl = vcat(schdl, fill(wrker,length(rng)))
+    end
+    return shuffle(schdl)
+end
 
 
 #%% remotecall_fetch
@@ -22,9 +29,7 @@ rmprocs() = rmprocs(workers())
 ex = :(varinfo())
 typeof(ex)
 dump(ex)
-rtn = remotecall_fetch(Core.eval, 2, Main, 
-    ex
-)
+rtn = remotecall_fetch(Core.eval, 2, Main, ex)
 rtn
 
 
@@ -38,17 +43,17 @@ remotecall_fetch(Core.eval, 1, Main, ex)
 remotecall_fetch(Core.eval, 2, Main, ex)
 remotecall_fetch(Core.eval, 3, Main, ex)
 
-remotecall_fetch(Core.eval, 1, Main, :(x))
-remotecall_fetch(Core.eval, 2, Main, :(x))
-remotecall_fetch(Core.eval, 3, Main, :(x))
+remotecall_fetch(Core.eval, 1, Main, :x)
+remotecall_fetch(Core.eval, 2, Main, :x)
+remotecall_fetch(Core.eval, 3, Main, :x)
 
 remotecall_fetch(Core.eval, 1, Main, :(x=1))
 remotecall_fetch(Core.eval, 2, Main, :(x=2))
 remotecall_fetch(Core.eval, 3, Main, :(x=3))
 
-remotecall_fetch(Core.eval, 1, Main, :(x))
-remotecall_fetch(Core.eval, 2, Main, :(x))
-remotecall_fetch(Core.eval, 3, Main, :(x))
+remotecall_fetch(Core.eval, 1, Main, :x)
+remotecall_fetch(Core.eval, 2, Main, :x)
+remotecall_fetch(Core.eval, 3, Main, :x)
 
 
 #%% run expressions on a worker in a module
@@ -60,7 +65,10 @@ end
 
 #%% notice we have to wait 
 xs = String[]
-for i=[2,3,2,3,2,3,2,3]
+njobs = 8;
+schdl = wrkplan(njobs,workers()) 
+# schdl = [2,3,2,3,2,3,2,3]
+for i in schdl
     global xs
     push!(xs, remotecall_fetch(Core.eval, i, Main, ex))
 end
@@ -68,9 +76,7 @@ end
 
 #%% use @async launch these jobs simultaniously, but xs gets updated in the background
 xs = String[]
-njobs = 8; 
-wrkrplan = splitrange(njobs, length(workers())) # or something like wrkrplan = [2,3,2,3,2,3,2,3]
-for i in wrkrplan
+for i in schdl
     global xs
     @async push!(xs, remotecall_fetch(Core.eval, i, Main, ex))
 end
@@ -78,7 +84,7 @@ end
 
 #%% use @sync on the for loop to wait till all the iterations have finished
 xs = String[]
-@sync for i in wrkrplan
+@sync for i in schdl
     global xs
     @async push!(xs, remotecall_fetch(Core.eval, i, Main, ex))
 end
@@ -118,9 +124,19 @@ let ag=2.0
 end
 
 
-
-#%% this works nicely with LBblocks
+#%% this works nicely with LBblocks that forces you to 
+#%% specify non-constant variables (@lblocks) and also constant variables 
+#%% which are not modules or explicity declared functions (@sblocks)
 using LBblocks
+
+# to avoid automatic transfer of constant variables to worker Main use 
+@sblock let ag=2.0, bg # bg needs to be declared or specified here
+    f_abg = x -> sum(x) + ag + bg 
+    remotecall_fetch(f_abg, 2, 5.2)
+end
+remotecall_fetch(Core.eval, 2, Main, consts_ex)
+
+# to allow automatic transfer of constant variables to worker Main use 
 @lblock let ag=2.0
     f_abg = x -> sum(x) + ag + bg 
     # bg is a constant global and will be moved to 
@@ -129,9 +145,6 @@ using LBblocks
 end
 remotecall_fetch(Core.eval, 2, Main, consts_ex)
 
-
-
-[s for s in names(Main) if isconst(Main,s) && !isa(Main.s,Function)]
 
 
 #%% TODO
