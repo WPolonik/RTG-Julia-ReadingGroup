@@ -1,34 +1,36 @@
 
 
-using Random: shuffle
+
+#%% remotecall_fetch on expressions
+#%% ===============================================
+#%% Call signature `remotecall_fetch(Core.eval, id::Int, m::Module, ex::Expr)`
+
 using Distributed
 import Distributed: rmprocs
 addprocs(2)
+@everywhere using InteractiveUtils # so varinfo() works
 
-#%% this is just to be able to run varinfo on all workers
-@everywhere using InteractiveUtils
-
-#%% easy removal of all jobs
+#%% a few convienient methods
 rmprocs() = rmprocs(workers())
 
-function wrkplan(njobs::Int, wrker_list::Vector{T}) where T<:Int
-    vec_rng = Distributed.splitrange(njobs, length(wrker_list))
+function workplan(njobs::Int, wrker_list::Vector{Int})
+    nw = length(wrker_list)
     schdl   = Int[]
-    for (wrker, rng) = zip(wrker_list, vec_rng)
-        schdl = vcat(schdl, fill(wrker,length(rng)))
+    for i=1:njobs
+        push!(schdl,wrker_list[mod(i,nw)+1])
     end
-    return shuffle(schdl)
+    return schdl
 end
 
+workplan(njobs::Int) = workplan(njobs, workers())
 
-#%% remotecall_fetch
-#%% ===============================================
 
 #%% run expressions on a worker in a module
 #%% -----------------------------------------------
 ex = :(varinfo())
 typeof(ex)
 dump(ex)
+Meta.show_sexpr(ex)
 rtn = remotecall_fetch(Core.eval, 2, Main, ex)
 rtn
 
@@ -37,7 +39,7 @@ rtn
 #%% -----------------------------------------------
 ex = quote
     x = rand()
-    "$x from $(myid())"    
+    "$x from $(myid())"
 end
 remotecall_fetch(Core.eval, 1, Main, ex)
 remotecall_fetch(Core.eval, 2, Main, ex)
@@ -60,14 +62,13 @@ remotecall_fetch(Core.eval, 3, Main, :x)
 #%% -----------------------------------------------
 ex = quote
     sleep(rand([1,5]))
-    "$(rand()) from $(myid())"    
+    "$(rand()) from $(myid())"
 end
 
-#%% notice we have to wait 
+#%% notice we have to wait for each remotecall_fetch
 xs = String[]
 njobs = 8;
-schdl = wrkplan(njobs,workers()) 
-# schdl = [2,3,2,3,2,3,2,3]
+schdl = workplan(njobs,workers())
 for i in schdl
     global xs
     push!(xs, remotecall_fetch(Core.eval, i, Main, ex))
@@ -92,17 +93,21 @@ end
 
 
 
-#%% Another call signature of remotecall_fetch
-#%% -----------------------------------------------
-
+#%% remotecall_fetch on functions
+#%% ==================================================
+#%% Call signature `remotecall_fetch(f::Function, id::Integer, args...; kwargs...)`
+#%%
 #%% Globals in closures are shipped over to worker Main (mirroring constants)
-#%% Note that generalized function 
-# remotecall_fetch(f, id::Integer, args...; kwargs...)
+
+
+using Distributed # restart julia ...
+addprocs(2)
+@everywhere using InteractiveUtils # so varinfo() works
 
 const ag = 1.0
 const bg = 1.0
 
-f_ag = x -> sum(x) + ag 
+f_ag = x -> sum(x) + ag
 f_ag(5.2)
 remotecall_fetch(f_ag, 2, 5.2)
 
@@ -110,58 +115,150 @@ remotecall_fetch(f_ag, 2, 5.2)
 remotecall_fetch(Core.eval, 2, Main, :(varinfo()))
 
 #%% Also ag is defined as constant in Main at worker==2
-consts_ex = quote 
+consts_ex = quote
     [s for s in names(Main) if isconst(Main,s)]
 end
 remotecall_fetch(Core.eval, 2, Main, consts_ex)
 
 
-#%% You can over-ride this behavior by decoupling 
-#%% the reference to ag with a let block 
+#%% You can over-ride this behavior by decoupling
+#%% the reference to ag with a let block
+remotecall_fetch(Core.eval, 3, Main, consts_ex) # no :ag
 let ag=2.0
-    f_ag = x -> sum(x) + ag 
-    remotecall_fetch(f_ag, 2, 5.2)
+    f_ag = x -> sum(x) + ag
+    remotecall_fetch(f_ag, 3, 5.2)
 end
+remotecall_fetch(Core.eval, 3, Main, consts_ex) # no :ag
 
 
-#%% this works nicely with LBblocks that forces you to 
-#%% specify non-constant variables (@lblocks) and also constant variables 
-#%% which are not modules or explicity declared functions (@sblocks)
+#%% but if you forget to add a global constant to the let argument list
+#%% it will get shipped over to the workers
+let ag=2.0
+    f_ag_bg = x -> sum(x) + ag + bg
+    remotecall_fetch(f_ag_bg, 2, 5.2)
+end
+remotecall_fetch(Core.eval, 2, Main, :(varinfo())) # now :bg shows up
+
+
+#%% LBblocks
+#%% -------------------------------------------------------
+#%% LBblocks that forces you to specify non-constant variables (@lblocks) and also constant variables
+#%% which are not modules or explicity declared functions (@sblocks).
+#%% Install LBblocks via
+#%%```
+#%%julia> using Pkg
+#%%julia> pkg"add https://github.com/EthanAnderes/LBblocks.jl#master"
+#%%```
+
 using LBblocks
+using MacroTools
 
-# to avoid automatic transfer of constant variables to worker Main use 
+# to avoid automatic transfer of constant variables to worker Main use
 @sblock let ag=2.0, bg # bg needs to be declared or specified here
-    f_abg = x -> sum(x) + ag + bg 
-    remotecall_fetch(f_abg, 2, 5.2)
+    f_abg = x -> sum(x) + ag + bg
+    remotecall_fetch(f_abg, 3, 5.2)
 end
-remotecall_fetch(Core.eval, 2, Main, consts_ex)
+remotecall_fetch(Core.eval, 3, Main, consts_ex)
 
-# to allow automatic transfer of constant variables to worker Main use 
+# to allow automatic transfer of constant variables to worker Main use
 @lblock let ag=2.0
-    f_abg = x -> sum(x) + ag + bg 
-    # bg is a constant global and will be moved to 
+    f_abg = x -> sum(x) + ag + bg
+    # bg is a constant global and will be moved to
     # worker 2 Main and declared constant there
-    remotecall_fetch(f_abg, 2, 5.2)
+    remotecall_fetch(f_abg, 3, 5.2)
 end
-remotecall_fetch(Core.eval, 2, Main, consts_ex)
+remotecall_fetch(Core.eval, 3, Main, consts_ex)
+
+
+#%% To take a look at what @sblock does ...
+ex = MacroTools.@expand @sblock let ag=bg, bg=ag, x
+   return sum(x) + ag + bg
+end
+
+Meta.show_sexpr(ex)
+ex.head
+ex.args[1] # function definition
+ex.args[2] # function call
+
+ex.args[2].head # spcifies its a call
+ex.args[2].args[1] # the function name
+ex.args[2].args[2:end] # the function args
+
+
+#%% Using pmap with anon functions generated by @sblocks are useful for avoiding
+#%% against accidentally shipping global constants
+#%% --------------------------------------------------------------------------------
+const b = 2.0
+
+fl = let a=2
+    function (x,y)
+        z = x - y + a + b
+        return z
+    end
+end
+
+fsb = @sblock let a=2, b # need to specify b in the argument list
+    function (x,y)
+        z = x - y + a + b
+        return z
+    end
+end
+
+@code_typed fl(1, 1.0)
+@code_typed fsb(1, 1.0)
+
+cwp = CachingPool(workers())
+
+pmap(fsb, cwp, 1:5, 2:6)
+remotecall_fetch(Core.eval, 2, Main, :(varinfo())) # no :b in namespace
+
+pmap(fl, cwp, 1:5, 2:6)
+remotecall_fetch(Core.eval, 2, Main, :(varinfo())) # now :b is in global namespace
 
 
 
-#%% TODO
+
+#%% Worker pools for queing jobs and another call signature of remotecall_fetch
+#%% ==================================================
+#%%  `remotecall_fetch(f::Function, wp::AbstractWorkerPool, args...; kwargs...)`
 #%%
-#%% 1. use workerpool to dynamically schedule jobs when available 
-#%% 2. threads
-#%% ```
-#%% function foo2!(x, y)
-#%%     Threads.@threads for i in eachindex(y) 
-#%%        y[i] = 2 * cos(sin(x[i]))
-#%%    end
-#%% end
-#%% ```
+#%%  Useful for dynamic scheduling of jobs
 
-#%%
-#%% Questions
+# restart julia ...
+using Distributed
+using LBblocks
+addprocs(5)
+@everywhere using InteractiveUtils # so varinfo() works
 
-#%% 1. what else can I put in place of Core.eval
-#%% 2. Globals in closures are shipped over to worker Main (mirroring constants)  
-#%%    but this does not work for functions? Why and how to differentiate these variables
+const b = rand(1000,1000)
+
+wp  = WorkerPool(workers())
+cwp = CachingPool(workers())
+
+fsb = @sblock let a=2, b
+    function (x,y)
+        z = x - y + a + sum(b)
+        return (z,myid())
+    end
+end
+
+#%% remotecall_fetch(fsb, wp, x, y) finds available worker
+@time rtn1 = let fsb=fsb, z=typeof(fsb(1.0, 1.0))[]
+    for (x,y) in zip(rand(5000), rand(5000))
+        push!(z, remotecall_fetch(fsb, wp, x, y))
+    end
+    z
+end
+
+#%% with CachingPool(workers()) fsb is shipped over just once
+@time rtn2 = let fsb=fsb, z=typeof(fsb(1.0, 1.0))[]
+    for (x,y) in zip(rand(5000), rand(5000))
+        push!(z, remotecall_fetch(fsb, cwp, x, y))
+    end
+    z
+end
+
+#%% with CachingPool(workers()) fsb is shipped over just once
+@time rtn3 = let fsb=fsb, x=rand(5000), y=rand(5000)
+    pmap(fsb, cwp, x, y)
+end
