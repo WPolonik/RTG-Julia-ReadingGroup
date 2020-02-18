@@ -1,264 +1,339 @@
 
 
 
-#%% remotecall_fetch on expressions
-#%% ===============================================
-#%% Call signature `remotecall_fetch(Core.eval, id::Int, m::Module, ex::Expr)`
+
+#' Basics
+#' ==========================================
+
+Sys.cpu_summary() #'
+Sys.CPU_NAME #'
+Sys.CPU_THREADS #'
+
+
 
 using Distributed
-import Distributed: rmprocs
-addprocs(2)
-@everywhere using InteractiveUtils # so varinfo() works
 
-#%% a few convienient methods
-rmprocs() = rmprocs(workers())
+#' this adds 3 new workers
+addprocs(3)
 
-function workplan(njobs::Int, wrker_list::Vector{Int})
-    nw = length(wrker_list)
-    schdl   = Int[]
-    for i=1:njobs
-        push!(schdl,wrker_list[mod(i,nw)+1])
-    end
-    return schdl
+#' workers returns the id numbers of the additional workers
+#' the main julia julia session always has id==1, the others id==2,3,4 ...
+workers()
+
+#'
+nworkers() # number of workers (excluding the master)
+
+#'
+nprocs() # number of workers (including the master)
+
+#' If you want to close the workers use rmprocs(workers())
+# workers() |> rmprocs
+
+#' interrupt(2,3) or interrupt() or interrupt([2,3,4])
+#' stops a computation on the works specified in the argument
+
+
+
+#' @everywhere for defining stuff in Main on other workers
+#' =========================================================
+#' ```julia
+#' help?> @everywhere
+#' @everywhere [procs()] expr
+#'
+#'   Execute an expression under Main on all procs. Errors on any of the processes
+#'   are collected into a CompositeException and thrown. For example:
+#'
+#'   @everywhere bar = 1
+#'
+#'   will define Main.bar on all processes.
+#' ```
+
+#' I mostly use `@everywhere` to import Modules on the workers and
+#' to run top level code like function definitions setting global constants.
+#' Here are some examples
+
+@everywhere using InteractiveUtils
+@everywhere function myfun1(x)
+    y = (id=myid(), x=x, r=rand())
+    print(y)
+    return y = (id=myid(), x=x, r=rand())
+end
+@everywhere [1,2] begin
+    a = 1
+    b = 2
+    const c = 3
+end #' notice that worker 3 does not have these variables defined
+
+
+@everywhere 2 varinfo() #' take a look at defs in worker2.Main
+#' we can run myfun1(10) on worker2 and send the to worker1
+out1 = @everywhere 2 myfun1(10)
+#' if you run on multiple workers nothing is returned to worker1
+@everywhere [2, 3] myfun1(10)
+
+
+a #' ✅
+@everywhere 2 a #' ✅
+@everywhere 3 a #' ❌ ...gives an error
+@everywhere 3 rand(c) #' ❌ ...gives an error
+
+@everywhere 3 a=1 #' define these variables on worker3
+@everywhere 3 b=2 #'
+@everywhere 3 const c=3 #'
+@everywhere 3 a #' ✅ ... now works
+@everywhere 3 rand(c) #' ✅ ... now works
+
+
+#' begin blocks just represent a chunck of code
+#' which, when run in the REPL, behaves as though each line is
+#' run sequentially at the REPL prompt (i.e. no new scope is introduced).
+#' The last line of a begin block is returned
+
+@everywhere 2 begin
+    x = 1
+    y = 2
+    x + y
 end
 
-workplan(njobs::Int) = workplan(njobs, workers())
+@everywhere 2 varinfo()
+#' notice x and y are defined since begin doesn't start a new scope
 
 
-#%% run expressions on a worker in a module
-#%% -----------------------------------------------
-ex = :(varinfo())
-typeof(ex)
-dump(ex)
-Meta.show_sexpr(ex)
-rtn = remotecall_fetch(Core.eval, 2, Main, ex)
-rtn
+#' let blocks
+#' ---------------------------
 
+#' Let blocks introduce a local scope. They can be used to evaluate code
+#' as if it was put in a function. The last line is returned
 
-#%% run expressions on a worker in a module
-#%% -----------------------------------------------
-ex = quote
-    x = rand()
-    "$x from $(myid())"
-end
-remotecall_fetch(Core.eval, 1, Main, ex)
-remotecall_fetch(Core.eval, 2, Main, ex)
-remotecall_fetch(Core.eval, 3, Main, ex)
-
-remotecall_fetch(Core.eval, 1, Main, :x)
-remotecall_fetch(Core.eval, 2, Main, :x)
-remotecall_fetch(Core.eval, 3, Main, :x)
-
-remotecall_fetch(Core.eval, 1, Main, :(x=1))
-remotecall_fetch(Core.eval, 2, Main, :(x=2))
-remotecall_fetch(Core.eval, 3, Main, :(x=3))
-
-remotecall_fetch(Core.eval, 1, Main, :x)
-remotecall_fetch(Core.eval, 2, Main, :x)
-remotecall_fetch(Core.eval, 3, Main, :x)
-
-
-#%% run expressions on a worker in a module
-#%% -----------------------------------------------
-ex = quote
-    sleep(rand([1,5]))
-    "$(rand()) from $(myid())"
+@everywhere 2 let
+    z = 1
+    w = 2
+    z + w
 end
 
-#%% notice we have to wait for each remotecall_fetch
-xs = String[]
-njobs = 8;
-schdl = workplan(njobs,workers())
-for i in schdl
-    global xs
-    push!(xs, remotecall_fetch(Core.eval, i, Main, ex))
+@everywhere 2 varinfo()
+#' Notice that z and w are *not* defined since let starts a local scope
+
+
+@everywhere 2 let
+    z = 1
+    w = 2
+    z + w + x + y
+end
+#' Notice that x and y reach into global Main on worker 2
+
+
+@everywhere 2 let x = 4, y = 2
+    z = 1
+    w = 2
+    z + w + x + y
+end
+#' x and y are local variables
+
+@everywhere 2 x + y
+#' x and y in Main on worker 2 are undistrurbed.
+
+@everywhere begin
+    x = 5
+    y = 10
 end
 
+@everywhere 2 varinfo()
+@everywhere 3 varinfo()
 
-#%% use @async launch these jobs simultaniously, but xs gets updated in the background
-xs = String[]
-for i in schdl
-    global xs
-    @async push!(xs, remotecall_fetch(Core.eval, i, Main, ex))
+@everywhere 2 x #' x is now 5 on worker2 and worker3
+@everywhere 3 x
+
+
+#' @spawnat,  Future and fetch for asynchronously evaluating expressions within functions
+#' ====================================================================================
+#' ```julia
+#' help?> @spawnat
+#' @spawnat p expr
+#'
+#'   Create a closure around an expression and run the closure asynchronously on process p. Return a Future to
+#'   the result. If p is the quoted literal symbol :any, then the system will pick a processor to use
+#'   automatically.
+#'
+#'   Examples
+#'   ≡≡≡≡≡≡≡≡≡≡
+#'
+#'   julia> addprocs(3);
+#'
+#'   julia> f = @spawnat 2 myid()
+#'   Future(2, 1, 3, nothing)
+#'
+#'   julia> fetch(f)
+#'   2
+#'
+#'   julia> f = @spawnat :any myid()
+#'   Future(3, 1, 7, nothing)
+#'
+#'   julia> fetch(f)
+#'   3
+#' ```
+
+#' Run this if restartinga fresh Julia session
+#=
+using Distributed
+addprocs(3)
+@everywhere using InteractiveUtils
+@everywhere begin
+    a = 1
+    b = 2
+    const c = 3
+    x = 5
+    y = 10
 end
+=#
+
+#' I use `@spawnat` and `fetch` within functions. Note: `@everywhere` is not suitable for this
+#' since it won't ship local variables workers Main...  `@spawnat`does so it can be called within functions.
+const d = 1
+
+r = @spawnat 2 a + d
+#' r is a Future which references a since computation on a remote worker.
+
+#' fetch askes the worker who ran `r` to send it to the fetch caller.
+#' fetch is a "sync" call so it will block till r has a value
+fetch(r)
+
+@everywhere 2 varinfo() #' Note that @spawnat shipped over d (unlike @everywhere).
+@everywhere 3 varinfo() #' no d on worker3
 
 
-#%% use @sync on the for loop to wait till all the iterations have finished
-xs = String[]
-@sync for i in schdl
-    global xs
-    @async push!(xs, remotecall_fetch(Core.eval, i, Main, ex))
+@everywhere 3 d = 3
+
+
+@everywhere 2 isconst(Main, :d) #' shipping by @spawnat preserves const
+@everywhere 3 isconst(Main, :d)
+
+let a = 0, d = 0
+    fetch(@spawnat 3 a + d)
 end
-#%% note the ordering of xs and that there are exactly 4 from worker 3 and 2
+@everywhere 3 d # b doesn't change
 
-
-
-#%% remotecall_fetch on functions
-#%% ==================================================
-#%% Call signature `remotecall_fetch(f::Function, id::Integer, args...; kwargs...)`
-#%%
-#%% Globals in closures are shipped over to worker Main (mirroring constants)
-
-
-using Distributed # restart julia ...
-addprocs(2)
-@everywhere using InteractiveUtils # so varinfo() works
-
-const ag = 1.0
-const bg = 1.0
-
-f_ag = x -> sum(x) + ag
-f_ag(5.2)
-remotecall_fetch(f_ag, 2, 5.2)
-
-#%% Now ag is defined as in Main at worker==2
-remotecall_fetch(Core.eval, 2, Main, :(varinfo()))
-
-#%% Also ag is defined as constant in Main at worker==2
-consts_ex = quote
-    [s for s in names(Main) if isconst(Main,s)]
-end
-remotecall_fetch(Core.eval, 2, Main, consts_ex)
-
-
-#%% You can over-ride this behavior by decoupling
-#%% the reference to ag with a let block
-remotecall_fetch(Core.eval, 3, Main, consts_ex) # no :ag
-let ag=2.0
-    f_ag = x -> sum(x) + ag
-    remotecall_fetch(f_ag, 3, 5.2)
-end
-remotecall_fetch(Core.eval, 3, Main, consts_ex) # no :ag
-
-
-#%% but if you forget to add a global constant to the let argument list
-#%% it will get shipped over to the workers
-let ag=2.0
-    f_ag_bg = x -> sum(x) + ag + bg
-    remotecall_fetch(f_ag_bg, 2, 5.2)
-end
-remotecall_fetch(Core.eval, 2, Main, :(varinfo())) # now :bg shows up
-
-
-#%% LBblocks
-#%% -------------------------------------------------------
-#%% LBblocks that forces you to specify non-constant variables (@lblocks) and also constant variables
-#%% which are not modules or explicity declared functions (@sblocks).
-#%% Install LBblocks via
+#' To gard against accidentally shipping over and defining globals
+#' you can use my alpha-status package LBblocks
 #%%```
 #%%julia> using Pkg
 #%%julia> pkg"add https://github.com/EthanAnderes/LBblocks.jl#master"
 #%%```
 
 using LBblocks
-using MacroTools
 
-# to avoid automatic transfer of constant variables to worker Main use
-@sblock let ag=2.0, bg # bg needs to be declared or specified here
-    f_abg = x -> sum(x) + ag + bg
-    remotecall_fetch(f_abg, 3, 5.2)
-end
-remotecall_fetch(Core.eval, 3, Main, consts_ex)
-
-# to allow automatic transfer of constant variables to worker Main use
-@lblock let ag=2.0
-    f_abg = x -> sum(x) + ag + bg
-    # bg is a constant global and will be moved to
-    # worker 2 Main and declared constant there
-    remotecall_fetch(f_abg, 3, 5.2)
-end
-remotecall_fetch(Core.eval, 3, Main, consts_ex)
-
-
-#%% To take a look at what @sblock does ...
-ex = MacroTools.@expand @sblock let ag=bg, bg=ag, x
-   return sum(x) + ag + bg
+@sblock let a = 0, d = 0
+    fetch(@spawnat 3 a + d)
 end
 
-Meta.show_sexpr(ex)
-ex.head
-ex.args[1] # function definition
-ex.args[2] # function call
+@sblock let a = 0
+    fetch(@spawnat 3 a + d)
+end #' ❌ ...gives an error since the body references d to global
 
-ex.args[2].head # spcifies its a call
-ex.args[2].args[1] # the function name
-ex.args[2].args[2:end] # the function args
+#' without @sblock worker 2 will try to find d in global scope
+let a = 0
+    fetch(@spawnat 2 a + d)
+end
+
+#' what happens if you try to re-define `d` in a local scope with @spawnat
+let
+    fetch(@spawnat 3 (d=10;d^2))
+end #'
+@everywhere 3 d
+#' So d is not re-defined in Main on worker 3.
+#' Lets try the same with @everywhere
+
+let
+    @everywhere 3 (d=10;d^2)
+end
+@everywhere 3 d
+#' Now d==10 on worker 3 since @everywhere always runs the code in workers Main.
+#' This is why you shouldn't use @everywhere inside functions or local scope.
 
 
-#%% Using pmap with anon functions generated by @sblocks are useful for avoiding
-#%% against accidentally shipping global constants
-#%% --------------------------------------------------------------------------------
-const b = 2.0
 
-fl = let a=2
-    function (x,y)
-        z = x - y + a + b
-        return z
+#' @async and @sync
+#' ------------------------
+
+#' It is important to note that @spawnat runs asynchronously if you don't immediately fetch the results
+xs = let xs = Future[], njobs = 20
+    for i = 1:njobs
+        x = @spawnat :any begin
+            tm = rand([1, 5])
+            sleep(tm)
+            "$(tm) from $(myid())"
+        end
+        push!(xs, x)
     end
+    xs
 end
+fxs = fetch.(xs)
+#' notice that the for-loop finished asynchronously, but
+#' fetching the values waited till all the computations synchronized
 
-fsb = @sblock let a=2, b # need to specify b in the argument list
-    function (x,y)
-        z = x - y + a + b
-        return z
+#' You can force the loop to wait till everything is done with @sync
+
+
+xs = let xs = Future[], njobs = 20
+    @sync for i = 1:njobs
+        x = @spawnat :any begin
+            tm = rand([1, 5])
+            sleep(tm)
+            "$(tm) from $(myid())"
+        end
+        push!(xs, x)
     end
+    xs
 end
-
-@code_typed fl(1, 1.0)
-@code_typed fsb(1, 1.0)
-
-cwp = CachingPool(workers())
-
-pmap(fsb, cwp, 1:5, 2:6)
-remotecall_fetch(Core.eval, 2, Main, :(varinfo())) # no :b in namespace
-
-pmap(fl, cwp, 1:5, 2:6)
-remotecall_fetch(Core.eval, 2, Main, :(varinfo())) # now :b is in global namespace
+fxs = fetch.(xs)
+#' Notice that the fetch was now able to grab the returned value immedately.
 
 
 
+#' addprocs over multiple machines
+#' ==========================================
 
-#%% Worker pools for queing jobs and another call signature of remotecall_fetch
-#%% ==================================================
-#%%  `remotecall_fetch(f::Function, wp::AbstractWorkerPool, args...; kwargs...)`
-#%%
-#%%  Useful for dynamic scheduling of jobs
+#' killall julia
+#' ps -u anderes
 
-# restart julia ...
-using Distributed
-using LBblocks
-addprocs(5)
-@everywhere using InteractiveUtils # so varinfo() works
+#' ----------------------
+#' The steps you should take to make
+#' sure Julia can connect without problems are the following (I will assume that
+#' you are connected to gumbel):
+#'
+#'    ssh-keygen
+#'
+#' (just press ENTER until you return to the command prompt. This will set up a
+#'  passwordless SSH key)
+#'
+#'    ssh-copy-id hilbert
+#'
+#' (this copies your SSH key into Hilbert's authorized_keys file. Make sure you
+#' say yes if prompted to verify the authenticity of the host!)
+#'
+#' Now, you can add passwordless SSH to fisher as well:
+#'
+#'    ssh-copy-id poisson
 
-const b = rand(1000,1000)
+####not sure if needed##### cat ~/.ssh/id_rsa.pub | ssh hilbert 'cat - >> authorized_keys'
 
-wp  = WorkerPool(workers())
-cwp = CachingPool(workers())
 
-fsb = @sblock let a=2, b
-    function (x,y)
-        z = x - y + a + sum(b)
-        return (z,myid())
-    end
-end
+machines = [("hilbert", 3), ("alan", 2)]
+# addprocs(machines, tunnel=true, exename = "/usr/local/bin/julia-1.3.0",topology=:master_worker)
+# addprocs(machines, tunnel=true, exename = "/usr/local/bin/julia-1.3.0",topology=:master_worker)
+addprocs(
+    machines,
+    tunnel = true,
+    exename = "julia-1.3.1",
+    topology = :master_worker,
+)
 
-#%% remotecall_fetch(fsb, wp, x, y) finds available worker
-@time rtn1 = let fsb=fsb, z=typeof(fsb(1.0, 1.0))[]
-    for (x,y) in zip(rand(5000), rand(5000))
-        push!(z, remotecall_fetch(fsb, wp, x, y))
-    end
-    z
-end
+@everywhere println(pwd())
 
-#%% with CachingPool(workers()) fsb is shipped over just once
-@time rtn2 = let fsb=fsb, z=typeof(fsb(1.0, 1.0))[]
-    for (x,y) in zip(rand(5000), rand(5000))
-        push!(z, remotecall_fetch(fsb, cwp, x, y))
-    end
-    z
-end
+@everywhere using LinearAlgebra
+@everywhere println(BLAS.vendor())
+@everywhere println(versioninfo())
 
-#%% with CachingPool(workers()) fsb is shipped over just once
-@time rtn3 = let fsb=fsb, x=rand(5000), y=rand(5000)
-    pmap(fsb, cwp, x, y)
-end
+
+
+workers() |> rmprocs
