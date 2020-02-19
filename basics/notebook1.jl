@@ -1,4 +1,4 @@
-#%% You can convert this to a notebook with 
+#%% You can convert this to a notebook with
 #%% ```
 #%% julia> using Weave
 #%% julia> convert_doc("notebook1.jl", "notebook1.ipynb")
@@ -27,7 +27,7 @@
 #%%   	```
 #%%   	julia> 😍 = √2
 #%% 	1.4142135623730951
-#%% 
+#%%
 #%% 	julia> 🤯 = 😍 + π
 #%% 	4.555806215962888
 #%% 	```
@@ -36,32 +36,32 @@
 #%% * Julia interacts with python so well, any of the missing functionality can be called out to python
 
 
-#%% Install 
+#%% Install
 #%% ==========================================================
 
 
-#%% Basic installation and documentation can be 
+#%% Basic installation and documentation can be
 #%% found at https://julialang.org
-#%% 
-#%% This wiki for documentation is also very good and 
+#%%
+#%% This wiki for documentation is also very good and
 #%% readable https://en.wikibooks.org/wiki/Introducing_Julia
 
 
 #%% Once you have installed the julia app it will be useful to be able to launch
-#%% it from the command line. To figure out the path do something like this in 
+#%% it from the command line. To figure out the path do something like this in
 #%% your terminal
 #%% ```shell
 #%% ~ ❯❯❯ ls /Applications/Julia*/Contents/Resources/julia/bin/julia
 #%% /Applications/Julia-1.3.1.app/Contents/Resources/julia/bin/julia
 #%% ```
-#%% 
+#%%
 #%% Now create an alias to that path by running (or adding to `.bash_profile` or `.zshrc`)
 #%% ```
 #%% alias julia="/Applications/Julia-1.3.1.app/Contents/Resources/julia/bin/julia"
 #%% ```
 #%%
-#%%  and/ or  
-#%%  
+#%%  and/ or
+#%%
 #%% ```
 #%% export PATH="/Applications/Julia-1.3.1.app/Contents/Resources/julia/bin/:$PATH"
 #%% ```
@@ -87,15 +87,15 @@ c  = randn(5,5) # a 5x5 matrix of standard normals
 Σ² = c * a * π
 varinfo()
 
-#%% 
+#%%
 using Statistics: mean, std # just import functions mean and std into global scope
 mean(c)
 std(c)
 
-#%% 
+#%%
 rand(1:10,25) # 25 draws with replacement from 1,2,3,..., 10
 
-#%% 
+#%%
 x = rand(1000, 1000)
 y = randn(1000, 1000)
 z = Array{Float64,2}(undef, 1000, 1000) # initialize an empty array
@@ -117,7 +117,7 @@ pointer(w)
 #%%  macros
 @time log.(x .+ 1) .- foo.(sin.(2 .* y));
 
-#%%  benchmarking macro 
+#%%  benchmarking macro
 using BenchmarkTools
 @benchmark log.(x .+ 1) .- foo.(sin.(2 .* y))
 
@@ -133,7 +133,7 @@ using BenchmarkTools
 #%%  To uninstall, just remove binaries (this should just be one directory) and ~/.julia/
 
 
-#%% 
+#%%
 #%% install 3rd party packages hosted on github.
 #%% these are saved in ~/.julia/
 #%% ```
@@ -153,7 +153,7 @@ var(X)  # -> (α * β) / ((α + β)² * (α + β + 1))
 # @edit mean(X)
 
 
-#%% 
+#%%
 # shell mode by typing ;
 # julia>; pwd
 # julia>; cd ..
@@ -176,7 +176,7 @@ histogram(randn(1000) * 0.1, nbins= 20)
 densityplot(randn(1000), randn(1000))
 
 
-#%%  
+#%%
 using SpecialFunctions: besselk # Modified Bessel function of the second kind of order nu
 x=range(0,5, length=1000)[2:end]
 ν = 3/2
@@ -235,7 +235,7 @@ Real <: AbstractArray
 
 
 
-#%%  JIT, multiple dispatch and Type stability 
+#%%  JIT, multiple dispatch and Type stability
 
 #%% I'm defining 4 different versions of foo
 function foo(x::Float64, y::Float64)
@@ -263,7 +263,7 @@ function foo(x)
     foo(x, x)
 end
 
-#%% 
+#%%
 foo(1, 1)
 
 foo(2.0, 1)
@@ -305,7 +305,7 @@ function baz(x) # not type stable
 end
 
 function boo(x) # type stable
-    cntr = 0.0        # same type as x entries 
+    cntr = 0.0        # same type as x entries
     for i = 1:length(x)
         if x[i] > 0
             cntr += 1.0 # stays a float
@@ -348,7 +348,7 @@ a = rand(10_000_000)
 
 
 
-#%%  multiple dispatch in action 
+#%%  multiple dispatch in action
 #%% ========================================================
 using Distributions
 
@@ -382,7 +382,7 @@ mean(["hi"])
 # edit("statistics.jl", 157)
 
 
-#%% a few fun extras 
+#%% a few fun extras
 #%% ====================================================
 
 #%%  easiy multiple assignment
@@ -430,7 +430,7 @@ As= Set([2,3,4,4,5,6])
 
 
 
-#%% loops 
+#%% loops
 #%% ==========================================
 
 #%% for loops
@@ -465,7 +465,7 @@ end
 
 
 
-#%% comprehensions 
+#%% comprehensions
 #%% ==========================================
 
 #% comprehensions for quick construction of Arrays
@@ -502,7 +502,7 @@ vecv = Array{Float64,1}[rand(i) for i=1:10]
 
 matv = Vector[rand(i+j) for i ∈ 1:10, j ∈ 2:5]
 
-#%% generaters 
+#%% generaters
 #%% ========================================================
 A = rand(10_000)
 @time sum(exp.(A) .+ sin.(A) .+ cos.(A))
@@ -536,6 +536,8 @@ function clos(data)
     loglike, updatedata # return the two functions
 end
 
+
+
 like1, updatedata1 = clos(rand(10))
 # now the data is closed off to any mutations other than
 # those given by updatedata
@@ -556,7 +558,7 @@ updatedata1(10) # add 10 to the data set
 
 
 
-#%%  some useful packages 
+#%%  some useful packages
 #%% ========================================================
 
 #%% PyPlot
@@ -579,21 +581,21 @@ scii = pyimport("scipy.interpolate")
 function f(x, y)
     s = hypot(x, y)
     phi = atan(y, x)
-    tau = s + s*(1-s)/5 * sin(6*phi) 
+    tau = s + s*(1-s)/5 * sin(6*phi)
     return 5*(1-tau) + tau
 end
 
-# These are the non-uniform spatial points we have f observed on 
+# These are the non-uniform spatial points we have f observed on
 npts = 400
 px   = 2 .* rand(npts) .- 1
 py   = 2 .* rand(npts) .- 1
 pf   = f.(px, py)
 
-# This the spatial grid of points we want to interpolate 
+# This the spatial grid of points we want to interpolate
 nxgrid = 200
 nygrid = 200
-X = range(-1,1,length=nxgrid)  .+ fill(0, nxgrid, nygrid) 
-Y = range(-1,1,length=nygrid)' .+ fill(0, nxgrid, nygrid) 
+X = range(-1,1,length=nxgrid)  .+ fill(0, nxgrid, nygrid)
+Y = range(-1,1,length=nygrid)' .+ fill(0, nxgrid, nygrid)
 
 # 2-d interpolation of irregular spatial locations
 griddata = scii.griddata
@@ -619,9 +621,9 @@ tight_layout()
 
 
 
-#%% from 
+#%% from
 #%% https://scipython.com/book/chapter-8-scipy/examples/two-dimensional-interpolation-with-scipyinterpolategriddata/
-py""" 
+py"""
 import numpy as np
 from scipy.interpolate import griddata
 import matplotlib.pyplot as plt
@@ -633,7 +635,7 @@ X, Y = np.meshgrid(x,y)
 def f(x, y):
     s = np.hypot(x, y)
     phi = np.arctan2(y, x)
-    tau = s + s*(1-s)/5 * np.sin(6*phi) 
+    tau = s + s*(1-s)/5 * np.sin(6*phi)
     return 5*(1-tau) + tau
 
 T = f(X, Y)
@@ -676,4 +678,3 @@ xnew = range(2, 9, length=1000)
 figure()
 plot(xnew, yinterp(xnew))
 plot(x, y,"r*")
-
