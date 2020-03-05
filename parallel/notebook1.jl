@@ -56,7 +56,7 @@ nprocs() # number of workers (including the master)
 @everywhere function myfun1(x)
     y = (id=myid(), x=x, r=rand())
     print(y)
-    return y = (id=myid(), x=x, r=rand())
+    return y
 end
 @everywhere [1,2] begin
     a = 1
@@ -94,6 +94,10 @@ a #' ✅
     y = 2
     x + y
 end
+@everywhere 2 rand()
+@everywhere rand()
+@everywhere a = rand()
+@everywhere 3 a
 
 @everywhere 2 varinfo()
 #' notice x and y are defined since begin doesn't start a new scope
@@ -141,7 +145,7 @@ end
 @everywhere 2 varinfo()
 @everywhere 3 varinfo()
 
-@everywhere 2 x #' x is now 5 on worker2 and worker3
+@everywhere 2 x
 @everywhere 3 x
 
 
@@ -208,10 +212,11 @@ fetch(r)
 @everywhere 2 isconst(Main, :d) #' shipping by @spawnat preserves const
 @everywhere 3 isconst(Main, :d)
 
+@everywhere 3 d
 let a = 0, d = 0
     fetch(@spawnat 3 a + d)
 end
-@everywhere 3 d # b doesn't change
+@everywhere 3 d # d doesn't change
 
 #' To gard against accidentally shipping over and defining globals
 #' you can use my alpha-status package LBblocks
@@ -222,7 +227,7 @@ end
 
 using LBblocks
 
-@sblock let a = 0, d = 0
+@sblock let a, d
     fetch(@spawnat 3 a + d)
 end
 

@@ -61,10 +61,7 @@ add"add PkgTemplates#master"
 #' So that you can quickly generate a new package add this to your startup file.
 """
 ```
-t = template(;
-	dev::Bool      = true, 
-	curr_dir::Bool = true, 
-)
+t = template(; curr_dir::Bool = true)
 ```
 This loads a basic template for generating packages with `PkgTemplates.jl`. 
 If your happy with the defaults the simplest way to run it is as follows
@@ -74,53 +71,70 @@ julia> t=template()
 julia> t("PkgName")
 ```
 
-### Options:
-* Set `dev=false` if you not want to have the package "dev'ed", i.e. add to the 
-julia main environment.
+### Options
 * Set `curr_dir=false` if you want your package directory to be stored in `~/.julia/dev`. 
 
+### Code loading without adding to environment
+
+To load `PkgName` in the REPL, i.e. run  `julia> import PkgName` 
+or `julia> using PkgName`, without adding `PkgName` to the 
+default pkg environment you have two options. 
+
+* Option 1:  
+```julia
+shell> cd <path to PkgName dir> 
+pkg> activate . 
+``` 
+* Option 2:
+```julia 
+pkg> activate <path to PkgName dir>
+``` 
+
+### Code loading by adding `PkgName` to environment
+
+Add `PkgName` to an environment 
+```julia
+pkg> dev <path to PkgName dir> 
+```
+This only needs to be done once. Then whenever/wherever julia is launched
+`julia> import PkgName` or `julia> using PkgName` will work.
+
 """
-function template(;
-		dev::Bool      = true, 
-		curr_dir::Bool = true, 
+function template(; curr_dir::Bool = true)
+	gitplug = Git(
+		ignore   = String[
+			"local", # local directory that is ignored by git
+			"*.jld",
+			"*.jld2",
+			"*.fits",
+			"*.aux",
+			"*.bbl",
+			"*.aux",
+			"*.blg",
+			"*.fdb_latexmk",
+			"*.log",
+			"*.synctex.gz",
+			"*.fls",
+			"*.jl.cov",
+			"*.jl.*.cov",
+			"*.jl.mem",
+			"*.DS_Store",
+		],
+		ssh      = false, 
+		manifest = true, 
 	)
-	
-	# standard ignore files I typically use
-	# note: "local" is the name for a directory I put in the package 
-	# which doesn't get tracked by git. 
-	ignore = String[
-		"local",
-		"*.jld",
-		"*.jld2",
-		"*.fits",
-		"*.aux",
-		"*.bbl",
-		"*.aux",
-		"*.blg",
-		"*.fdb_latexmk",
-		"*.log",
-		"*.synctex.gz",
-		"*.fls",
-		"*.jl.cov",
-		"*.jl.*.cov",
-		"*.jl.mem",
-		"*.DS_Store",
-	]
-
-	git = Git(;ignore=ignore, ssh=false, manifest=true)
-    
-    if dev 
-    	plugins = [git, Develop()]
-    else 
-    	plugins = [git]
-    end
-
+    # if dev 
+    # 	plugins = PkgTemplates.Plugin[gitplug, Develop()]
+    # else 
+    	plugins = PkgTemplates.Plugin[gitplug]
+    # end
     return Template(; 
 		dir     = curr_dir ? pwd() : "~/.julia/dev",
 		julia   = v"1.3",
 		plugins = plugins,
     )
 end
+
 
 
 #' I'll use this for a generating project directory in one of my courses
@@ -357,6 +371,7 @@ julia> using Pkg
 (@v1.4) pkg> activate .
 (NewProject) pkg> instantiate
 ```
+
 
 
 
