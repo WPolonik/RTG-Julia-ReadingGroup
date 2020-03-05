@@ -1,8 +1,8 @@
 #' NLopt
 #' ==========================================================
 
-#' NLopt is a high quality optimization package ported to Julia. 
-#' I highly recommend it. 
+#' NLopt is a high quality optimization package ported to Julia.
+#' I highly recommend it.
 #'
 #' Here are the modules we will use in this notebook
 
@@ -24,13 +24,19 @@ y = [1.9, 2.0] |> x->cos(x[1])  |> x -> x+2 |> log #'
 
 map(x -> cos(x^2), [π/4,π/2,π]) #'
 
+cos.(([π/4,π/2,π]).^2)
+
+[cos(i^2) for i in [π/4,π/2,π]]
+
+[π/4,π/2,π] .|> x -> cos(x^2)
+
 (cos∘exp∘log)(.1) #'
 
 cos(exp(log(.1))) #'
 
 (cos∘exp∘log).(rand(10,10)) #'
 
-y1 = map([π/4,π/2,π]) do x 
+y1 = map([π/4,π/2,π]) do x
     z = cos(x+1) + 2
     log(z)
 end #'
@@ -39,22 +45,36 @@ y2 = map(x -> (z=cos(x+1)+2 ; log(z)), [π/4,π/2,π]) #'
 
 #' You can also give names to anonymous functions
 
-anon_fun1 = x -> sin(x^2) 
+anon_fun1 = x -> sin(x^2)
 anon_fun1(2.0)
 
 #' Long form of anonymous functions
 
 a = 10
 anon_fun2 = function (x,y)
-    z = x+y+a 
+    z = x+y+a
     z += sin(z)
     return z^2
 end
 
-#' This also works 
+function (x,y)
+    z = x+y+a
+    z += sin(z)
+    return z^2
+end
+
+
+function declar_fun(x,y)
+    z = x+y+a
+    z += sin(z)
+    return z^2
+end
+
+
+#' This also works
 
 anon_fun2 = (x,y) -> begin
-    z = x+y+a 
+    z = x+y+a
     z += sin(z)
     z^2 # but you don't have access to the `return keyword`
 end
@@ -69,7 +89,7 @@ const c = 7
 
 f1 = () -> a + c
 
-f2 = let 
+f2 = let
     ()-> a + c
 end
 
@@ -90,8 +110,11 @@ function createf6(a,c)
 end
 f6 = createf6(a,c)
 
+function f7(a=1, c=2)
+    a+c
+end
 
-#' you can check to see how these functions handles their internal variables 
+#' you can check to see how these functions handles their internal variables
 
 @show code_info_f1 = code_lowered(f1,Int);
 @show code_info_f2 = code_lowered(f2,Int);
@@ -99,13 +122,15 @@ f6 = createf6(a,c)
 @show code_info_f4 = code_lowered(f4,Int);
 @show code_info_f5 = code_lowered(f5,Int);
 @show code_info_f6 = code_lowered(f6,Int);
+@show code_info_f7 = code_lowered(f7,Int, Int);
 
-#' Notice the reference to Main.a or Main.c in f1, ..., f4. 
-#' Only f5 and f6 hold `a` and `c` as an internal state and 
+@code_lowered f7()
+#' Notice the reference to Main.a or Main.c in f1, ..., f4.
+#' Only f5 and f6 hold `a` and `c` as an internal state and
 #' don't refer to global variables.
 
 
-#' Lets benchmark these 6 functions  
+#' Lets benchmark these 6 functions
 
 #' The last 3 are all fast ...
 @benchmark f6() #'
@@ -129,20 +154,20 @@ f6 = createf6(a,c)
 
 #' NLopt with closures
 #' ----------------------------------------------------------
-#' Usually, when optimizing a function you want to include gradient calculations. 
-#' However, in the CMB case these are complicated. 
-#' In NLopt you can choose from a collection of non-gradient optimization algorithms. 
+#' Usually, when optimizing a function you want to include gradient calculations.
+#' However, in the CMB case these are complicated.
+#' In NLopt you can choose from a collection of non-gradient optimization algorithms.
 #' We will use the one called `LN_BOBYQA`.
 #'
-#' Here is a link some optimization algorithms that do not require gradient 
+#' Here is a link some optimization algorithms that do not require gradient
 #' calculations:
 #' see http://ab-initio.mit.edu/wiki/index.php/NLopt_Reference for a reference
 #' ... also see https://nlopt.readthedocs.io/en/latest/NLopt_Algorithms/
-#' 
-#' Naming convention for algorithms is 
-#' 
-#' {G,L}{N,D}_xxxx 
-#' 
+#'
+#' Naming convention for algorithms is
+#'
+#' {G,L}{N,D}_xxxx
+#'
 #' G/L - denotes global/local optimization
 #' N/D - denotes derivative-free/gradient-based algorithms
 
@@ -163,14 +188,14 @@ LD_algm = [:LD_MMA, :LD_SLSQP, :LD_LBFGS, :LD_TNEWTON]
 
 llmax, llmax_with_grad = let μ=μ, Σ=Σ
 
-    llmax = function (x) 
+    llmax = function (x)
         xμ    = x .- μ
         Σ⁻¹xμ = Σ \ xμ
         ll = - (xμ ⋅ Σ⁻¹xμ)
         return ll
     end
 
-    llmax_with_grad = function (x, grad) 
+    llmax_with_grad = function (x, grad)
         xμ    = x .- μ
         Σ⁻¹xμ = Σ \ xμ
         ll = - (xμ ⋅ Σ⁻¹xμ)
@@ -186,12 +211,12 @@ end
 
 
 
-#' NLopt expects that the function your trying to optimze takes two arguments: 
-#' the variable `x` is the one your optimizing over and a variable `grad` which, 
-#' when the funtion is called, over-writes `grad` with the gradient of the objective 
-#' function at `x`. In this case we don't do anything to `grad` since 
+#' NLopt expects that the function your trying to optimze takes two arguments:
+#' the variable `x` is the one your optimizing over and a variable `grad` which,
+#' when the funtion is called, over-writes `grad` with the gradient of the objective
+#' function at `x`. In this case we don't do anything to `grad` since
 #' we are only using non-gradient based algorithms.
-#' 
+#'
 #' The following code sets up the optimzation object.
 
 
@@ -217,7 +242,7 @@ opt2.lower_bounds = [-10.0, -Inf]
 opt1.upper_bounds = [10.0, Inf]
 opt2.upper_bounds = [10.0, Inf]
 
-#' 
+#'
 
 # opt.maxeval
 # opt.xtol_rel
@@ -227,12 +252,9 @@ opt2.upper_bounds = [10.0, Inf]
 
 
 
-#' Note: I set the upper and lower bounds to the bounding box constraints used for training pypico. 
+#' Note: I set the upper and lower bounds to the bounding box constraints used for training pypico.
 #'
-#' Now we tell NLopt to optimize it. 
+#' Now we tell NLopt to optimize it.
 
 optf1, optx1, ret1 = optimize(opt1, Float64[0,0])
 optf2, optx2, ret2 = optimize(opt2, Float64[0,0])
-
-
-
